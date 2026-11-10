@@ -1,0 +1,5 @@
+frac,comparison,diff,ci_lo,ci_hi,excludes_zero
+100,disc_ft - disc_scratch,0.008,0.001,0.015,True
+100,resnet_imagenet - disc_ft,0.034,0.019,0.049,True
+10,disc_ft - disc_scratch,-0.001,-0.01,0.009,False
+10,resnet_imagenet - disc_ft,0.059,0.043,0.076,True

@@ -1,0 +1,7 @@
+model,frac,BCN,HAM,MSK,NO_ID
+disc_ft,100,0.811,0.882,0.638,0.684
+disc_scratch,100,0.802,0.875,0.597,0.657
+resnet_imagenet,100,0.858,0.905,0.79,0.803
+disc_ft,10,0.714,0.814,0.534,0.594
+disc_scratch,10,0.715,0.809,0.55,0.546
+resnet_imagenet,10,0.799,0.861,0.665,0.74

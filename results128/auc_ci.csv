@@ -1,0 +1,7 @@
+model,frac,n_seeds,auc,ci_lo,ci_hi,seed_std
+disc_ft,100,3,0.861,0.838,0.885,0.001
+disc_scratch,100,3,0.853,0.828,0.877,0.002
+resnet_imagenet,100,3,0.895,0.876,0.913,0.002
+disc_ft,10,3,0.789,0.764,0.816,0.006
+disc_scratch,10,3,0.789,0.764,0.816,0.01
+resnet_imagenet,10,3,0.848,0.824,0.87,0.004
