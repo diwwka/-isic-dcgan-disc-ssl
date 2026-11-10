@@ -1,0 +1,13 @@
+# дані та кеші (ліцензія ISIC-2019: CC BY-NC, не публікуємо)
+cache/
+data/
+ISIC_2019_*/
+*.npy
+*.npz
+*.pth
+*.pt
+# службове
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/

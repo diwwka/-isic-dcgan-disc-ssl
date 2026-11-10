@@ -1,0 +1,16 @@
+frac,comparison,diff,ci_lo,ci_hi,excludes_zero
+100,disc_ft - disc_scratch,0.015,0.008,0.024,True
+100,disc_fe - disc_scratch,-0.007,-0.016,0.002,False
+100,disc_scratch - resnet_scratch,0.001,-0.008,0.01,False
+100,resnet_imagenet - disc_ft,0.019,0.007,0.031,True
+100,resnet_imagenet - disc_fe,0.042,0.027,0.056,True
+10,disc_ft - disc_scratch,0.013,0.006,0.019,True
+10,disc_fe - disc_scratch,0.03,0.02,0.04,True
+10,disc_scratch - resnet_scratch,0.002,-0.006,0.01,False
+10,resnet_imagenet - disc_ft,0.04,0.025,0.055,True
+10,resnet_imagenet - disc_fe,0.023,0.01,0.037,True
+1,disc_ft - disc_scratch,0.002,-0.005,0.008,False
+1,disc_fe - disc_scratch,0.01,-0.002,0.022,False
+1,disc_scratch - resnet_scratch,0.001,-0.01,0.011,False
+1,resnet_imagenet - disc_ft,0.057,0.044,0.071,True
+1,resnet_imagenet - disc_fe,0.05,0.035,0.066,True
