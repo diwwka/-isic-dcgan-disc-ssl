@@ -1,0 +1,11 @@
+frac,comparison,diff,ci_lo,ci_hi,excludes_zero
+100,wdisc_ft - wdisc_scratch,-0.003,-0.009,0.002,False
+100,wdisc_fe - wdisc_scratch,-0.022,-0.033,-0.011,True
+100,wdisc_ft - disc_ft,-0.02,-0.031,-0.009,True
+100,wdisc_fe - disc_fe,-0.016,-0.028,-0.005,True
+100,wdisc_scratch - disc_scratch,-0.001,-0.009,0.006,False
+10,wdisc_ft - wdisc_scratch,0.008,0.002,0.014,True
+10,wdisc_fe - wdisc_scratch,0.012,0.002,0.021,True
+10,wdisc_ft - disc_ft,0.002,-0.006,0.011,False
+10,wdisc_fe - disc_fe,-0.011,-0.023,0.001,False
+10,wdisc_scratch - disc_scratch,0.007,-0.001,0.015,False
