@@ -1,0 +1,5 @@
+frac,comparison,diff,ci_lo,ci_hi,excludes_zero
+100,disc_ft - disc_scratch,0.024,0.015,0.034,True
+100,disc_fe - disc_scratch,0.003,-0.009,0.014,False
+10,disc_ft - disc_scratch,0.025,0.014,0.037,True
+10,disc_fe - disc_scratch,0.021,0.008,0.034,True

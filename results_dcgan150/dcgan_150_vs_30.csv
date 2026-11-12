@@ -1,0 +1,7 @@
+frac,comparison,auc30,auc150,diff,ci_lo,ci_hi,excludes_zero
+100,disc_ft: 150 ep - 30 ep,0.86,0.867,0.006,0.002,0.011,True
+100,disc_fe: 150 ep - 30 ep,0.84,0.845,0.005,-0.002,0.012,False
+100,disc_scratch: 150 ep - 30 ep,0.843,0.842,-0.0,-0.001,0.001,False
+10,disc_ft: 150 ep - 30 ep,0.798,0.817,0.019,0.011,0.027,True
+10,disc_fe: 150 ep - 30 ep,0.818,0.812,-0.006,-0.014,0.003,False
+10,disc_scratch: 150 ep - 30 ep,0.791,0.791,-0.0,-0.002,0.002,False
