@@ -15,7 +15,12 @@ ISIC-2019 Training (25 331 зображення, 8 класів) заванта�
 ```
 src/        код (exp.py, analyze.py, make_split.py, preprocess.py, ...)
 cache/      кеш зображень isic2019_64.npy тощо (не в git)
-results/    runs/*.json, summary.csv, auc_ci.csv, paired_diffs.csv, графіки
+results/    основний експеримент 64×64, 5 сідів (runs/*.json, *_scores.npz, auc_ci.csv, paired_diffs.csv, auc_by_source.csv, графіки);
+            також 5 прогонів ResNet18 на 224 px (файли з суфіксом _ref224)
+results128/ перевірка чутливості на 128×128 (disc_scratch, disc_ft, resnet_imagenet; 100 % і 10 %; 3 сіди)
+results_wgan/ WGAN-GP, 30 епох (wdisc_*; 100 % і 10 %; сіди 0–4): runs, pretrain, wgan_auc_ci.csv, wgan_paired_diffs.csv, wgan_training.png
+results_wgan150/ WGAN-GP, 150 епох (сіди 0–2), той самий формат
+results_dcgan150/ контроль: DCGAN, 150 епох (disc_scratch, disc_ft, disc_fe; 100 % і 10 %; сіди 0–2); dcgan_150_vs_30.csv
 ```
 
 Шляхи за замовчуванням: `--cache` = `../cache`, `--out` = `../results` (відносно `src/`).
@@ -39,9 +44,21 @@ python exp.py pretrain --seed 0 # змагальне передтренуван�
 python exp.py all --seeds 0 1 2 3 4
 python exp.py summary
 python analyze.py               # довірчі інтервали (кластерний bootstrap), парні різниці
+
+# спрощена перевірка WGAN-GP (гіпотеза H3); exp.py не змінюється
+python wgan.py smoke
+python wgan.py all --seeds 0 1 2
+python wgan.py analyze --seeds 0 1 2 3 4
+
+# довша тривалість (150 епох) і контроль DCGAN-150
+python wgan.py all --seeds 0 1 2 --epochs 150 --out ../results_wgan150
+python exp.py all --seeds 0 1 2 --models disc_scratch disc_ft disc_fe --fracs 100 10 --epochs 150 --out ../results_dcgan150
+python wgan.py analyze --seeds 0 1 2 --out ../results_wgan150 --main ../results_dcgan150
+python analyze.py --out ../results_dcgan150
+python compare150.py            # DCGAN-150 проти DCGAN-30 (парні різниці)
 ```
 
-Моделі: `disc_scratch`, `disc_ft`, `disc_fe`, `resnet_scratch`, `resnet_imagenet`. Подробиці режимів: докстрінг на початку `exp.py`.
+Моделі: `disc_scratch`, `disc_ft`, `disc_fe`, `resnet_scratch`, `resnet_imagenet`; у `wgan.py` додатково `wdisc_scratch`, `wdisc_ft`, `wdisc_fe` (критик WGAN-GP з GroupNorm). Подробиці режимів: докстрінг на початку `exp.py`.
 
 ## Результати (test AUC, 64×64, середнє за 5 сідів)
 
@@ -53,7 +70,7 @@ python analyze.py               # довірчі інтервали (класт�
 | disc_scratch | 0,844 | 0,784 | 0,703 |
 | resnet_scratch | 0,844 | 0,782 | 0,702 |
 
-Інтервали, парні порівняння та обмеження дослідження наведені в тексті роботи (розділ 3). Це дослідницький код, а не медичний виріб: результати не призначені для клінічного використання.
+Файли `*_scores.npz` містять оцінки моделей на val/test, на них працює `analyze.py` (довірчі інтервали можна відтворити без повторного навчання). Інтервали, парні порівняння та обмеження дослідження наведені в тексті роботи (розділ 3). Це дослідницький код, а не медичний виріб: результати не призначені для клінічного використання.
 
 ## Ліцензія
 
