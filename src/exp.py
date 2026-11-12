@@ -5,6 +5,7 @@
   python exp.py pretrain --seed 0            змагальне передтренування DCGAN на train-зображеннях без міток
   python exp.py train --model resnet_imagenet --frac 100 --seed 0
   python exp.py all --seeds 0 1 2            усі моделі x частки міток x сіди (пропускає вже готові)
+  python exp.py train --model resnet_imagenet --frac 100 --seed 0 --tag demo --save_model   зберегти модель для app.py
   python exp.py summary                      зведена таблиця і графік (середнє +- std за сідами)
 Моделі: disc_scratch | disc_ft (передтренований, донавчання) | disc_fe (передтренований, заморожений) |
         resnet_scratch | resnet_imagenet
@@ -27,7 +28,7 @@ class Data:
     """Кеш зображень: для 64 px лежить цілком на GPU (uint8), для 224 px читається з диска (memmap)."""
     def __init__(self, cache, size, dev):
         arr = np.load(Path(cache) / f'isic2019_{size}.npy', mmap_mode='r')
-        self.gpu = size <= 64
+        self.gpu = size <= 128
         self.dev = dev
         self.t = torch.from_numpy(np.ascontiguousarray(arr)).to(dev) if self.gpu else None
         self.m = None if self.gpu else arr
@@ -68,41 +69,48 @@ def winit(m):
 
 
 class Generator(nn.Module):
-    def __init__(s, nz=100, ngf=64, nc=3):
+    """Генератор DCGAN: 1x1 -> 4x4 -> ... -> size x size. Для size=64 збігається з початковою архітектурою."""
+    def __init__(s, nz=100, ngf=64, nc=3, size=64):
         super().__init__()
-        s.main = nn.Sequential(
-            nn.ConvTranspose2d(nz, ngf * 8, 4, 1, 0, bias=False), nn.BatchNorm2d(ngf * 8), nn.ReLU(True),
-            nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False), nn.BatchNorm2d(ngf * 4), nn.ReLU(True),
-            nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False), nn.BatchNorm2d(ngf * 2), nn.ReLU(True),
-            nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False), nn.BatchNorm2d(ngf), nn.ReLU(True),
-            nn.ConvTranspose2d(ngf, nc, 4, 2, 1, bias=False), nn.Tanh())  # вихід 64x64
+        c = ngf * (size // 8)
+        L = [nn.ConvTranspose2d(nz, c, 4, 1, 0, bias=False), nn.BatchNorm2d(c), nn.ReLU(True)]
+        while c > ngf:
+            L += [nn.ConvTranspose2d(c, c // 2, 4, 2, 1, bias=False), nn.BatchNorm2d(c // 2), nn.ReLU(True)]
+            c //= 2
+        L += [nn.ConvTranspose2d(ngf, nc, 4, 2, 1, bias=False), nn.Tanh()]
+        s.main = nn.Sequential(*L)
 
     def forward(s, z):
         return s.main(z)
 
 
-def disc_backbone(nc=3, ndf=64):  # 64x64 -> 512x4x4
-    return nn.Sequential(
-        nn.Conv2d(nc, ndf, 4, 2, 1, bias=False), nn.LeakyReLU(0.2, True),
-        nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False), nn.BatchNorm2d(ndf * 2), nn.LeakyReLU(0.2, True),
-        nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False), nn.BatchNorm2d(ndf * 4), nn.LeakyReLU(0.2, True),
-        nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False), nn.BatchNorm2d(ndf * 8), nn.LeakyReLU(0.2, True))
+def feat_ch(size=64, ndf=64):
+    return ndf * (size // 8)          # 64 -> 512, 128 -> 1024; просторовий розмір карти завжди 4x4
+
+
+def disc_backbone(nc=3, ndf=64, size=64):  # size x size -> feat_ch x 4 x 4
+    L = [nn.Conv2d(nc, ndf, 4, 2, 1, bias=False), nn.LeakyReLU(0.2, True)]
+    c, r = ndf, size // 2
+    while r > 4:
+        L += [nn.Conv2d(c, c * 2, 4, 2, 1, bias=False), nn.BatchNorm2d(c * 2), nn.LeakyReLU(0.2, True)]
+        c *= 2; r //= 2
+    return nn.Sequential(*L)
 
 
 class DiscGAN(nn.Module):  # режим GAN: логіт «справжнє / згенероване»
-    def __init__(s):
+    def __init__(s, size=64):
         super().__init__()
-        s.backbone = disc_backbone(); s.head = nn.Conv2d(512, 1, 4, 1, 0, bias=False)
+        s.backbone = disc_backbone(size=size); s.head = nn.Conv2d(feat_ch(size), 1, 4, 1, 0, bias=False)
 
     def forward(s, x):
         return s.head(s.backbone(x)).view(-1)
 
 
 class DiscCls(nn.Module):  # режим класифікації: логіт «злоякісне»
-    def __init__(s, freeze=False):
+    def __init__(s, freeze=False, size=64):
         super().__init__()
-        s.backbone = disc_backbone(); s.freeze = freeze
-        s.head = nn.Sequential(nn.Flatten(), nn.Dropout(0.3), nn.Linear(512 * 4 * 4, 1))
+        s.backbone = disc_backbone(size=size); s.freeze = freeze
+        s.head = nn.Sequential(nn.Flatten(), nn.Dropout(0.3), nn.Linear(feat_ch(size) * 4 * 4, 1))
 
     def forward(s, x):
         if s.freeze:
@@ -113,7 +121,7 @@ class DiscCls(nn.Module):  # режим класифікації: логіт «�
         return s.head(f).view(-1)
 
 
-def build_model(kind, ckpt, dev, smoke=False):
+def build_model(kind, ckpt, dev, smoke=False, size=64):
     if kind in ('resnet_scratch', 'resnet_imagenet'):
         w = None
         if kind == 'resnet_imagenet':
@@ -131,7 +139,7 @@ def build_model(kind, ckpt, dev, smoke=False):
         m.forward_orig = m.forward
         m.forward = lambda x, _m=m: _m.forward_orig(x).view(-1)
         return m.to(dev)
-    m = DiscCls(freeze=(kind == 'disc_fe'))
+    m = DiscCls(freeze=(kind == 'disc_fe'), size=size)
     m.apply(winit)
     if kind in ('disc_ft', 'disc_fe'):
         sd = torch.load(ckpt, map_location='cpu')
@@ -148,7 +156,7 @@ def pretrain(a, df, data, dev):
     ck = out / f'gan_s{a.seed}.pt'
     torch.manual_seed(a.seed)
     tr = np.where(df.split.values == 'train')[0]          # всі train-зображення, МІТКИ НЕ ВИКОРИСТОВУЮТЬСЯ
-    G, D = Generator().to(dev), DiscGAN().to(dev)
+    G, D = Generator(size=a.size).to(dev), DiscGAN(size=a.size).to(dev)
     G.apply(winit); D.apply(winit)
     oG = torch.optim.Adam(G.parameters(), 2e-4, betas=(0.5, 0.999))
     oD = torch.optim.Adam(D.parameters(), 2e-4, betas=(0.5, 0.999))
@@ -229,7 +237,7 @@ def train_cls(a, df, data, dev, kind, frac, seed, ckpt=None, smoke=False):
     lab = np.where(sp == 'train')[0] if frac == 100 else np.where(df[f'lab{frac}_s{seed}'].values == 1)[0]
     iv, it = np.where(sp == 'val')[0], np.where(sp == 'test')[0]
     npos = y[lab].sum(); pw = float((len(lab) - npos) / max(npos, 1))
-    m = build_model(kind, ckpt, dev, smoke)
+    m = build_model(kind, ckpt, dev, smoke, a.size)
     lr = a.lr or (1e-3 if kind == 'disc_fe' else 3e-4)
     opt = torch.optim.AdamW([p for p in m.parameters() if p.requires_grad], lr=lr, weight_decay=1e-4)
     sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, a.iters)
@@ -258,6 +266,12 @@ def train_cls(a, df, data, dev, kind, frac, seed, ckpt=None, smoke=False):
     res.update(model=kind, frac=frac, seed=seed, tag=a.tag, n_labeled=int(len(lab)), pos_weight=pw, lr=lr, iters=a.iters,
                bs=bs, size=a.size, best_it=best_it, seconds=time.time() - t0, history=hist)
     json.dump(res, open(fn, 'w'), indent=1)
+    if getattr(a, 'save_model', False):
+        md = Path(a.out) / 'models'; md.mkdir(parents=True, exist_ok=True)
+        torch.save(dict(kind=kind, size=a.size, state_dict=best_sd, thr_youden=res['youden']['threshold'],
+                        thr_spec90=res['spec90']['threshold'], test_auc=res['test_auc'], val_auc=res['val_auc'],
+                        youden=res['youden'], spec90=res['spec90'], frac=frac, seed=seed), md / f'{tag}.pt')
+        print(f'  модель збережено: {md / (tag + ".pt")}')
     print(f'  => {tag}: TEST AUC {res["test_auc"]:.3f} | bAcc {res["youden"]["balanced_acc"]:.3f} | '
           f'sens@spec90 {res["spec90"]["sensitivity"]:.3f} | {res["seconds"]:.0f} с')
 
@@ -268,7 +282,7 @@ def run_all(a, df, data, dev, smoke=False):
         a.seed = seed
         if any(k.startswith('disc_f') for k in a.models) and not ck.exists():
             pretrain(a, df, data, dev)
-        for frac in FRACS:
+        for frac in a.fracs:
             for kind in a.models:
                 train_cls(a, df, data, dev, kind, frac, seed, ck, smoke)
 
@@ -336,7 +350,7 @@ def main():
     p.add_argument('--frac', type=int, default=100, choices=FRACS)
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--seeds', type=int, nargs='+', default=[0, 1, 2])
-    p.add_argument('--size', type=int, default=64, choices=[64, 224])
+    p.add_argument('--size', type=int, default=64, choices=[64, 128, 224])
     p.add_argument('--iters', type=int, default=3000)
     p.add_argument('--eval_every', type=int, default=150)
     p.add_argument('--bs', type=int, default=128)
@@ -344,6 +358,8 @@ def main():
     p.add_argument('--lr', type=float, default=None)
     p.add_argument('--amp', action='store_true')
     p.add_argument('--tag', default='')
+    p.add_argument('--fracs', type=int, nargs='+', default=FRACS, choices=FRACS, help='частки міток для команди all')
+    p.add_argument('--save_model', action='store_true', help='зберегти вагу найкращої контрольної точки і пороги (results/models/<tag>.pt)')
     a = p.parse_args()
     dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Пристрій:', dev, torch.cuda.get_device_name(0) if dev.type == 'cuda' else '')

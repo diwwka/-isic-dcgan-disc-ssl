@@ -24,17 +24,19 @@ def main():
     p.add_argument('--csv', default=str(HERE / 'split_isic2019.csv'))
     p.add_argument('--out', default=str(HERE.parent / 'results'))
     p.add_argument('--B', type=int, default=1000)
+    p.add_argument('--tag', default='', help='аналізувати лише прогони з цим тегом (наприклад ref224); результати йдуть у підпапку')
     a = p.parse_args()
     out = Path(a.out); df = pd.read_csv(a.csv)
     runs = []
     for f in sorted((out / 'runs').glob('*.json')):
         r = json.load(open(f))
         z = f.with_name(f.stem + '_scores.npz')
-        if r.get('tag') or not z.exists():
+        if r.get('tag', '') != a.tag or not z.exists():
             continue
         runs.append((r['model'], r['frac'], r['seed'], np.load(z)))
     if not runs:
         raise SystemExit('Немає файлів *_scores.npz. Спершу перезапусти експерименти оновленим exp.py.')
+    outw = out / a.tag if a.tag else out; outw.mkdir(exist_ok=True)
     te = runs[0][3]['test_idx']
     assert all((r[3]['test_idx'] == te).all() for r in runs), 'тестові індекси мають збігатися'
     y = df.label_bin.values[te].astype(int); grp = df.group.values[te]; src = df.source.values[te]
@@ -52,7 +54,7 @@ def main():
                     ci_lo=round(np.nanpercentile(M[(m, f)], 2.5), 3), ci_hi=round(np.nanpercentile(M[(m, f)], 97.5), 3),
                     seed_std=round(point[(m, f)][1], 3)) for m, f in keys]
     ci = pd.DataFrame(rows_ci).sort_values(['frac', 'model'], ascending=[False, True])
-    ci.to_csv(out / 'auc_ci.csv', index=False)
+    ci.to_csv(outw / 'auc_ci.csv', index=False)
     print('\n== AUC на тесті (середнє за сідами) з 95% bootstrap-інтервалом за ураженнями ==')
     print(ci.to_string(index=False))
     pr = []
@@ -62,7 +64,7 @@ def main():
                 d = M[(x, f)] - M[(z, f)]; lo, hi = np.nanpercentile(d, [2.5, 97.5])
                 pr.append(dict(frac=f, comparison=f'{x} - {z}', diff=round(point[(x, f)][0] - point[(z, f)][0], 3),
                                ci_lo=round(lo, 3), ci_hi=round(hi, 3), excludes_zero=bool(lo > 0 or hi < 0)))
-    pr = pd.DataFrame(pr); pr.to_csv(out / 'paired_diffs.csv', index=False)
+    pr = pd.DataFrame(pr); pr.to_csv(outw / 'paired_diffs.csv', index=False)
     print('\n== Парні різниці AUC (одні й ті самі тестові зображення) ==')
     print(pr.to_string(index=False))
     tr = df[df.split == 'train']; rate = tr.groupby('source').label_bin.mean()
@@ -72,7 +74,7 @@ def main():
     for m, f in keys:
         rs = [z for mm, ff, _, z in runs if (mm, ff) == (m, f)]
         bs.append(dict(model=m, frac=f, **{s: round(np.mean([auc(y[src == s], z['test'][src == s]) for z in rs]), 3) for s in srcs}))
-    bs = pd.DataFrame(bs).sort_values(['frac', 'model'], ascending=[False, True]); bs.to_csv(out / 'auc_by_source.csv', index=False)
+    bs = pd.DataFrame(bs).sort_values(['frac', 'model'], ascending=[False, True]); bs.to_csv(outw / 'auc_by_source.csv', index=False)
     print(f'\n== AUC усередині кожного джерела (усунуто ярлик «джерело»); джерело-лише baseline AUC = {base:.3f} ==')
     print(bs.to_string(index=False))
     import matplotlib; matplotlib.use('Agg'); import matplotlib.pyplot as plt
@@ -83,7 +85,7 @@ def main():
     ax.axhline(base, ls='--', c='gray', lw=1, label=f'лише джерело ({base:.2f})')
     ax.set_xticks(range(3)); ax.set_xticklabels([f'{f}%' for f in FRACS]); ax.set_xlabel('Частка розмічених даних')
     ax.set_ylabel('Test ROC-AUC'); ax.grid(alpha=.3); ax.legend(fontsize=8); fig.tight_layout()
-    fig.savefig(out / 'auc_vs_labels_ci.png', dpi=150); print('\nЗбережено: auc_ci.csv, paired_diffs.csv, auc_by_source.csv, auc_vs_labels_ci.png')
+    fig.savefig(outw / 'auc_vs_labels_ci.png', dpi=150); print('\nЗбережено: auc_ci.csv, paired_diffs.csv, auc_by_source.csv, auc_vs_labels_ci.png')
 
 
 if __name__ == '__main__':
